@@ -43,27 +43,27 @@ func makeReader(params parameters) (*csv.Reader, *os.File) { // later add a meth
 	return reader, file
 }
 
-func readCsv(params parameters, rowChannel chan<- map[string]string) {
+func readCsv(params parameters, recordChannel chan<- map[string]string) {
 	reader, file := makeReader(params)
 	defer file.Close() // close the file before readCsv() ends
 
 	headers, err := reader.Read()
 	processErr(err)
 
-	for row, err := reader.Read(); err != io.EOF; row, err = reader.Read() {
+	for record, err := reader.Read(); err != io.EOF; record, err = reader.Read() {
 		processErr(err)
 
-		rowMap := make(map[string]string)
+		recordMap := make(map[string]string)
 
-		for ind, field := range row {
-			rowMap[headers[ind]] = field
+		for ind, field := range record {
+			recordMap[headers[ind]] = field
 		}
 
-		rowChannel <- rowMap
+		recordChannel <- recordMap
 	}
 
-	// tell writeJson() that there are no more rows coming
-	close(rowChannel)
+	// tell writeJson() that there are no more records coming
+	close(recordChannel)
 }
 
 func writeJson(params parameters, recordChannel <-chan map[string]string, done chan<- bool) {
@@ -114,11 +114,11 @@ func main() {
 	params, err := processParams()
 	processErr(err)
 
-	rowChannel := make(chan map[string]string)
+	recordChannel := make(chan map[string]string)
 	done := make(chan bool)
 
-	go readCsv(params, rowChannel)
-	go writeJson(params, rowChannel, done)
+	go readCsv(params, recordChannel)
+	go writeJson(params, recordChannel, done)
 
 	<-done
 }
