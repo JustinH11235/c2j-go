@@ -9,87 +9,116 @@ import (
 	"os"
 )
 
+type parameters struct {
+	filepath string
+}
+
 func processErr(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func main() {
+func processParams() (parameters, error) {
 	// fmt.Println(os.Args)
 
 	// get flag info here ===
 
 	flag.Parse()
 
-	filepath := flag.Arg(0)
+	filepath := flag.Arg(0) // change to accept stdin by default, option for filepath in future
 	// fmt.Println(filepath)
 
-	file, err := os.Open(filepath)
-	processErr(err)
+	return parameters{filepath}, nil
+}
 
-	// close the file before main() ends
-	defer file.Close()
+func makeReader(params parameters) (*csv.Reader, *os.File) { // later add a method that reads differently based on input location, also have a close method
+	file, err := os.Open(params.filepath)
+	processErr(err)
 
 	reader := csv.NewReader(file)
 	reader.Comma = ','
 	reader.LazyQuotes = true
 
+	return reader, file
+}
+
+func readCsv(params parameters, rowChannel chan<- map[string]string) {
+	reader, file := makeReader(params)
+	defer file.Close() // close the file before readCsv() ends
+
 	headers, err := reader.Read()
 	processErr(err)
 
-	// fmt.Println(headers)
-
-	// make an empty slice of maps, one map per row
-	rowsSlice := []map[string]string{}
 	for row, err := reader.Read(); err != io.EOF; row, err = reader.Read() {
 		processErr(err)
 
-		// fmt.Println(row)
-
 		rowMap := make(map[string]string)
 
-		for ind, value := range row {
-			rowMap[headers[ind]] = value
+		for ind, field := range row {
+			rowMap[headers[ind]] = field
 		}
 
-		rowsSlice = append(rowsSlice, rowMap)
+		rowChannel <- rowMap
 	}
 
-	// fmt.Println(rowsSlice)
-	// fmt.Println("\n\n\n\n\n\n\n\n")
+	// tell writeJson() that there are no more rows coming
+	close(rowChannel)
+}
 
-	fmt.Println("[")
+func writeJson(params parameters, recordChannel <-chan map[string]string, done chan<- bool) {
+	fmt.Print("[")
 
-	for ind, rowMap := range rowsSlice {
-		fmt.Println("  {")
-		// fmt.Println("   ", rowMap)
-
-		rowMapHeaders := make([]string, 0, len(rowMap))
-		for header := range rowMap {
-			rowMapHeaders = append(rowMapHeaders, header)
+	firstRecord := true
+	for recordMap, more := <-recordChannel; more; recordMap, more = <-recordChannel {
+		var endLastRecord string
+		if firstRecord {
+			endLastRecord = "\n"
+			firstRecord = false
+		} else {
+			endLastRecord = ",\n"
 		}
 
-		for ind, header := range rowMapHeaders {
-			var endChar string
-			if ind < len(rowMap)-1 {
-				endChar = ","
+		fmt.Print(endLastRecord)
+		fmt.Print("  {")
+
+		firstField := true
+		for header, field := range recordMap {
+			var endLastField string
+			if firstField {
+				endLastField = "\n"
+				firstField = false
 			} else {
-				endChar = ""
+				endLastField = ",\n"
 			}
 
-			fmt.Printf("    \"%s\": \"%s\"%s\n", header, rowMap[header], endChar)
+			fmt.Print(endLastField)
+			fmt.Printf("    \"%s\": \"%s\"", header, field)
 		}
 
-		var endChar string
-		if ind < len(rowsSlice)-1 {
-			endChar = ","
-		} else {
-			endChar = ""
-		}
-
-		fmt.Printf("  }%s\n", endChar)
+		fmt.Print("\n  }")
 	}
 
-	fmt.Println("]")
+	fmt.Println("\n]")
+
+	// tell main() we are done writing the JSON
+	done <- true
+}
+
+func main() {
+	flag.Usage = func() {
+		fmt.Printf("Usage: %s <filepath>\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+
+	params, err := processParams()
+	processErr(err)
+
+	rowChannel := make(chan map[string]string)
+	done := make(chan bool)
+
+	go readCsv(params, rowChannel)
+	go writeJson(params, rowChannel, done)
+
+	<-done
 }
