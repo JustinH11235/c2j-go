@@ -13,7 +13,7 @@ import (
 option ideas:
 - indent, num spaces
 - output to .json file instead of stdout, -o
-- take input from file instead of stdin
+- take input from file instead of stdin -i
 - compact boolean
 */
 
@@ -52,26 +52,29 @@ func (r *fileReader) cleanup() {
 	r.file.Close()
 }
 
-// type stdinReader struct {
-// }
+type stdinReader struct {
+	reader *csv.Reader
+}
 
-// func (r *stdinReader) init() {
+func (r *stdinReader) init(params parameters) {
+	reader := csv.NewReader(os.Stdin)
+	reader.Comma = ','
+	// reader.LazyQuotes = true
 
-// }
+	r.reader = reader
+}
 
-// func (r *stdinReader) read() ([]string, error) {
+func (r *stdinReader) read() ([]string, error) {
+	return r.reader.Read()
+}
 
-// }
-
-// func (r *stdinReader) cleanup() {
-
-// }
+func (r *stdinReader) cleanup() {}
 
 func getReader(params parameters) reader {
-	// do if statements here to determine which kind of reader
-
 	var r reader
-	if true {
+	if params.filepath == "" {
+		r = &stdinReader{}
+	} else {
 		r = &fileReader{}
 	}
 
@@ -86,16 +89,14 @@ func processErr(err error) {
 }
 
 func processParams() (parameters, error) {
-	// fmt.Println(os.Args)
-
 	// get flag info here ===
+	filepath := flag.String("i", "", "Input CSV filepath")
 
 	flag.Parse()
 
-	filepath := flag.Arg(0) // change to accept stdin by default, option for filepath in future
-	// fmt.Println(filepath)
+	// get normal arguments here ===
 
-	return parameters{filepath}, nil
+	return parameters{*filepath}, nil
 }
 
 func readCsv(params parameters, recordChannel chan<- map[string]string) {
@@ -162,7 +163,7 @@ func writeJson(params parameters, recordChannel <-chan map[string]string, done c
 
 func main() {
 	flag.Usage = func() {
-		fmt.Printf("Usage: %s <filepath>\n", os.Args[0])
+		fmt.Printf("Usage: %s [options]\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 
