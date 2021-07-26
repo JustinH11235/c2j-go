@@ -9,8 +9,74 @@ import (
 	"os"
 )
 
+/*
+option ideas:
+- indent, num spaces
+- output to .json file instead of stdout, -o
+- take input from file instead of stdin
+- compact boolean
+*/
+
 type parameters struct {
 	filepath string
+}
+
+type reader interface {
+	init(parameters)
+	read() ([]string, error)
+	cleanup()
+}
+
+type fileReader struct {
+	file   *os.File
+	reader *csv.Reader
+}
+
+func (r *fileReader) init(params parameters) {
+	file, err := os.Open(params.filepath)
+	processErr(err)
+
+	reader := csv.NewReader(file)
+	reader.Comma = ','
+	// reader.LazyQuotes = true
+
+	r.file = file
+	r.reader = reader
+}
+
+func (r *fileReader) read() ([]string, error) {
+	return r.reader.Read()
+}
+
+func (r *fileReader) cleanup() {
+	r.file.Close()
+}
+
+// type stdinReader struct {
+// }
+
+// func (r *stdinReader) init() {
+
+// }
+
+// func (r *stdinReader) read() ([]string, error) {
+
+// }
+
+// func (r *stdinReader) cleanup() {
+
+// }
+
+func getReader(params parameters) reader {
+	// do if statements here to determine which kind of reader
+
+	var r reader
+	if true {
+		r = &fileReader{}
+	}
+
+	r.init(params)
+	return r
 }
 
 func processErr(err error) {
@@ -32,25 +98,14 @@ func processParams() (parameters, error) {
 	return parameters{filepath}, nil
 }
 
-func makeReader(params parameters) (*csv.Reader, *os.File) { // later add a method that reads differently based on input location, also have a close method
-	file, err := os.Open(params.filepath)
-	processErr(err)
-
-	reader := csv.NewReader(file)
-	reader.Comma = ','
-	reader.LazyQuotes = true
-
-	return reader, file
-}
-
 func readCsv(params parameters, recordChannel chan<- map[string]string) {
-	reader, file := makeReader(params)
-	defer file.Close() // close the file before readCsv() ends
+	reader := getReader(params)
+	defer reader.cleanup() // cleanup before readCsv() ends
 
-	headers, err := reader.Read()
+	headers, err := reader.read()
 	processErr(err)
 
-	for record, err := reader.Read(); err != io.EOF; record, err = reader.Read() {
+	for record, err := reader.read(); err != io.EOF; record, err = reader.read() {
 		processErr(err)
 
 		recordMap := make(map[string]string)
@@ -120,5 +175,6 @@ func main() {
 	go readCsv(params, recordChannel)
 	go writeJson(params, recordChannel, done)
 
+	// block main() until writeJson() is done writing
 	<-done
 }
