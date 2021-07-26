@@ -13,8 +13,13 @@ func readCsv(params parameters, recordChannel chan<- map[string]string) {
 	reader := createReader(params)
 	defer reader.cleanup() // cleanup before readCsv() ends
 
-	headers, err := reader.read()
-	processErr(err)
+	// if csv contains headers, read headers
+	var headers []string
+	var err error
+	if !params.no_header {
+		headers, err = reader.read()
+		processErr(err)
+	}
 
 	for record, err := reader.read(); err != io.EOF; record, err = reader.read() {
 		processErr(err)
