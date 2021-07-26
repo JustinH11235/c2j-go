@@ -44,7 +44,7 @@ func mapToJsonString(recordMap map[string]string, params parameters) string {
 		processErr(err)
 		return string(jsonBytes)
 	} else {
-		jsonBytes, err := json.MarshalIndent(recordMap, indent, indent)
+		jsonBytes, err := json.MarshalIndent(recordMap, indent, indent) // converts map into JSON string
 		processErr(err)
 		return indent + string(jsonBytes) // add indent to first line
 	}
@@ -76,8 +76,12 @@ func writeJson(params parameters, recordChannel <-chan map[string]string, done c
 		endLastRecord := lineEnd + lineBreak
 		writer.write(endLastRecord)
 
-		// convert map into JSON string
 		writer.write(mapToJsonString(recordMap, params))
+
+		/*
+			Old code that implemented json.Marshal(), removed since json.Marshal() handles all the quirks
+			of JSON such as escaping
+		*/
 
 		// writer.write("  {")
 
