@@ -2,23 +2,26 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"strings"
 )
 
 /*
 option ideas:
-- indent, num spaces
 - output to .json file instead of stdout, -o
-- take input from file instead of stdin -i
-- compact boolean
+- header boolean
 */
 
 type parameters struct {
-	filepath string
+	filepath  string
+	no_header bool
+	compact   bool
+	indent    int
 }
 
 type reader interface {
@@ -88,17 +91,6 @@ func processErr(err error) {
 	}
 }
 
-func processParams() (parameters, error) {
-	// get flag info here ===
-	filepath := flag.String("i", "", "Input CSV filepath")
-
-	flag.Parse()
-
-	// get normal arguments here ===
-
-	return parameters{*filepath}, nil
-}
-
 func readCsv(params parameters, recordChannel chan<- map[string]string) {
 	reader := getReader(params)
 	defer reader.cleanup() // cleanup before readCsv() ends
@@ -112,7 +104,11 @@ func readCsv(params parameters, recordChannel chan<- map[string]string) {
 		recordMap := make(map[string]string)
 
 		for ind, field := range record {
-			recordMap[headers[ind]] = field
+			if params.no_header {
+				recordMap[fmt.Sprint(ind)] = field
+			} else {
+				recordMap[headers[ind]] = field
+			}
 		}
 
 		recordChannel <- recordMap
@@ -122,43 +118,83 @@ func readCsv(params parameters, recordChannel chan<- map[string]string) {
 	close(recordChannel)
 }
 
+func mapToJsonString(recordMap map[string]string, params parameters) string {
+	indent := strings.Repeat(" ", params.indent)
+
+	if params.compact {
+		jsonBytes, err := json.Marshal(recordMap)
+		processErr(err)
+		return string(jsonBytes)
+	} else {
+		jsonBytes, err := json.MarshalIndent(recordMap, indent, indent)
+		processErr(err)
+		return indent + string(jsonBytes) // add indent to first line
+	}
+}
+
 func writeJson(params parameters, recordChannel <-chan map[string]string, done chan<- bool) {
+	var lineBreak string
+	if params.compact {
+		lineBreak = ""
+	} else {
+		lineBreak = "\n"
+	}
+
 	fmt.Print("[")
 
 	firstRecord := true
 	for recordMap, more := <-recordChannel; more; recordMap, more = <-recordChannel {
-		var endLastRecord string
+		var lineEnd string
 		if firstRecord {
-			endLastRecord = "\n"
+			lineEnd = ""
 			firstRecord = false
 		} else {
-			endLastRecord = ",\n"
+			lineEnd = ","
 		}
 
+		endLastRecord := lineEnd + lineBreak
 		fmt.Print(endLastRecord)
-		fmt.Print("  {")
 
-		firstField := true
-		for header, field := range recordMap {
-			var endLastField string
-			if firstField {
-				endLastField = "\n"
-				firstField = false
-			} else {
-				endLastField = ",\n"
-			}
+		// convert map into JSON string
+		fmt.Print(mapToJsonString(recordMap, params))
 
-			fmt.Print(endLastField)
-			fmt.Printf("    \"%s\": \"%s\"", header, field)
-		}
+		// fmt.Print("  {")
 
-		fmt.Print("\n  }")
+		// firstField := true
+		// for header, field := range recordMap {
+		// 	var endLastField string
+		// 	if firstField {
+		// 		endLastField = "\n"
+		// 		firstField = false
+		// 	} else {
+		// 		endLastField = ",\n"
+		// 	}
+
+		// 	fmt.Print(endLastField)
+		// 	// fmt.Printf("    \"%s\": \"%s\"", header, field)
+		// }
+
+		// fmt.Print("\n  }")
 	}
 
-	fmt.Println("\n]")
+	fmt.Println(lineBreak + "]")
 
 	// tell main() we are done writing the JSON
 	done <- true
+}
+
+func processParams() (parameters, error) {
+	// get flag info here ===
+	filepath := flag.String("i", "", "Input CSV filepath")
+	no_header := flag.Bool("no-header", false, "Input does not contain header (integers will be used as headers)")
+	compact := flag.Bool("compact", false, "Output without whitespace")
+	indent := flag.Int("indent", 2, "Indent of lines (always 0 if -compact is set)")
+
+	flag.Parse()
+
+	// get normal arguments here ===
+
+	return parameters{*filepath, *no_header, *compact, *indent}, nil
 }
 
 func main() {
