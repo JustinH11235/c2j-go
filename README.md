@@ -19,6 +19,13 @@ A CSV to JSON converter command line tool written in [Go](https://golang.org/).
 * --indent \<spaces\>:\
         Indent of lines (always 0 if -compact is set) (default 2)
 
+## Installation Instructions
+1. Make sure Go is installed, instructions [here](https://golang.org/doc/install) for your OS
+2. Clone this repository and navigate to it in the terminal
+3. Run `go build`
+4. Use the newly compiled binary: `./c2j-go -i test.csv`
+5. (optionally put this binary into a directory that your system's PATH variable looks in so that you can run it from anywhere using `c2j-go -i test.csv`. For Linux you can do `sudo cp ./c2j-go /usr/local/bin/`)
+
 ## Credits
 Based on [this](https://levelup.gitconnected.com/tutorial-how-to-create-a-cli-tool-in-golang-a0fd980264f) tutorial.
 
